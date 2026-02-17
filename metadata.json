@@ -1,0 +1,7 @@
+{
+  "name": "Hotel Noga Digital Check-in",
+  "description": "An interactive digital registration and rules guide for Hotel Noga guests, featuring rule visualization, electronic signature, and QR code access.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
