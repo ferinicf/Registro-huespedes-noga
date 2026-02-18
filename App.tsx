@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useEffect } from 'react';
 import { AppStep, GuestData, Language } from './types';
 import Header from './components/Header';
@@ -75,7 +74,7 @@ const App: React.FC = () => {
         contents: { 
           parts: [
             imagePart, 
-            { text: "Extract the following information from this ID card: first name, last name, nationality, and birth date. Formatting: birthday must be YYYY-MM-DD. Return exactly this JSON structure." }
+            { text: "Extract the following information from this ID card: first name, last name, nationality, and birth date. Formatting: birthday must be YYYY-MM-DD. Return ONLY a valid JSON object. No markdown, no explanations." }
           ] 
         },
         config: {
@@ -93,7 +92,11 @@ const App: React.FC = () => {
         },
       });
 
-      const extracted = JSON.parse(response.text);
+      const text = response.text;
+      // Limpiar posibles etiquetas markdown si la IA las incluye
+      const jsonStr = text.includes('```') ? text.match(/\{[\s\S]*\}/)?.[0] || text : text;
+      const extracted = JSON.parse(jsonStr);
+      
       setGuestData(prev => ({
         ...prev,
         ...extracted,

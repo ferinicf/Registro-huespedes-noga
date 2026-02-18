@@ -33,6 +33,7 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ data, onChange, onN
   const [selectedLada, setSelectedLada] = useState(COUNTRY_CODES[0].code);
   const [phoneNumber, setPhoneNumber] = useState('');
 
+  // Sincronizar campos complejos cuando los datos del padre cambian (IA Auto-fill)
   useEffect(() => {
     if (data.email) {
       const parts = data.email.split('@');
@@ -50,18 +51,25 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ data, onChange, onN
       if (parts.length >= 2) {
         setSelectedLada(parts[0]);
         setPhoneNumber(parts.slice(1).join(''));
+      } else {
+        setPhoneNumber(data.cellphone);
       }
     }
-  }, []);
+  }, [data.email, data.cellphone]);
 
+  // Actualizar el padre cuando el usuario escribe en los campos descompuestos
   useEffect(() => {
     const fullEmail = emailUser && emailDomain && emailExt ? `${emailUser}@${emailDomain}.${emailExt}` : '';
-    if (fullEmail !== data.email) onChange({ email: fullEmail });
+    if (fullEmail && fullEmail !== data.email) {
+      onChange({ email: fullEmail });
+    }
   }, [emailUser, emailDomain, emailExt]);
 
   useEffect(() => {
     const fullPhone = phoneNumber ? `${selectedLada} ${phoneNumber}` : '';
-    if (fullPhone !== data.cellphone) onChange({ cellphone: fullPhone });
+    if (fullPhone && fullPhone !== data.cellphone) {
+      onChange({ cellphone: fullPhone });
+    }
   }, [selectedLada, phoneNumber]);
 
   const inputClass = "w-full border-b-2 border-noga-midteal/30 py-3 px-1 focus:border-noga-brown outline-none transition-colors text-base font-medium text-noga-deepteal bg-transparent";
@@ -78,11 +86,11 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ data, onChange, onN
       <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
         <div>
           <label className={labelClass}>{t.firstName}</label>
-          <input required type="text" value={data.firstName} onChange={e => onChange({ firstName: e.target.value })} className={inputClass} />
+          <input required type="text" value={data.firstName || ''} onChange={e => onChange({ firstName: e.target.value })} className={inputClass} />
         </div>
         <div>
           <label className={labelClass}>{t.lastName}</label>
-          <input required type="text" value={data.lastName} onChange={e => onChange({ lastName: e.target.value })} className={inputClass} />
+          <input required type="text" value={data.lastName || ''} onChange={e => onChange({ lastName: e.target.value })} className={inputClass} />
         </div>
       </div>
 
@@ -111,22 +119,22 @@ const RegistrationForm: React.FC<RegistrationFormProps> = ({ data, onChange, onN
         </div>
         <div>
           <label className={labelClass}>{t.nationality}</label>
-          <input required type="text" value={data.nationality} onChange={e => onChange({ nationality: e.target.value })} className={inputClass} />
+          <input required type="text" value={data.nationality || ''} onChange={e => onChange({ nationality: e.target.value })} className={inputClass} />
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
         <div>
           <label className={labelClass}>{t.birthday}</label>
-          <input required type="date" value={data.birthday} onChange={e => onChange({ birthday: e.target.value })} className={inputClass} />
+          <input required type="date" value={data.birthday || ''} onChange={e => onChange({ birthday: e.target.value })} className={inputClass} />
         </div>
         <div>
           <label className={labelClass}>{t.checkIn}</label>
-          <input required type="date" value={data.checkInDate} onChange={e => onChange({ checkInDate: e.target.value })} className={inputClass} />
+          <input required type="date" value={data.checkInDate || ''} onChange={e => onChange({ checkInDate: e.target.value })} className={inputClass} />
         </div>
         <div>
           <label className={labelClass}>{t.checkOut}</label>
-          <input required type="date" value={data.checkOutDate} onChange={e => onChange({ checkOutDate: e.target.value })} className={inputClass} />
+          <input required type="date" value={data.checkOutDate || ''} onChange={e => onChange({ checkOutDate: e.target.value })} className={inputClass} />
         </div>
       </div>
 
