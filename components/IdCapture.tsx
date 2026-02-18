@@ -1,6 +1,6 @@
 
 import React, { useRef, useState, useEffect } from 'react';
-import { Camera, ArrowLeft, Loader2, RefreshCw } from 'lucide-react';
+import { Camera, ArrowLeft, Loader2, RefreshCw, ShieldAlert } from 'lucide-react';
 import { Language } from '../types';
 import { translations } from '../translations';
 
@@ -17,19 +17,17 @@ const IdCapture: React.FC<IdCaptureProps> = ({ onCapture, onBack, lang }) => {
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment');
+  const [permissionError, setPermissionError] = useState<string | null>(null);
 
-  // Sincronizar el stream con el elemento video de forma más robusta para Android
   useEffect(() => {
     let isMounted = true;
 
     const setupVideo = async () => {
       if (isCameraActive && stream && videoRef.current) {
-        // Asegurar que el objeto se asigne
         if (videoRef.current.srcObject !== stream) {
           videoRef.current.srcObject = stream;
         }
         
-        // Listener para cuando el video esté listo para reproducir
         const handleLoadedMetadata = async () => {
           if (!videoRef.current) return;
           try {
@@ -42,15 +40,12 @@ const IdCapture: React.FC<IdCaptureProps> = ({ onCapture, onBack, lang }) => {
         videoRef.current.addEventListener('loadedmetadata', handleLoadedMetadata);
 
         try {
-          // Intento de reproducción inmediata
           await videoRef.current.play();
         } catch (err) {
-          console.warn("Initial play failed, waiting for metadata or retrying...");
           if (isMounted) {
-            // Reintento con delay para dar tiempo al hardware de la tablet (común en Samsung)
             setTimeout(() => {
               if (isMounted && videoRef.current) {
-                videoRef.current.play().catch(e => console.error("Final play attempt failed:", e));
+                videoRef.current.play().catch(e => console.error("Retry play failed:", e));
               }
             }, 500);
           }
@@ -68,7 +63,6 @@ const IdCapture: React.FC<IdCaptureProps> = ({ onCapture, onBack, lang }) => {
     return () => { isMounted = false; };
   }, [isCameraActive, stream]);
 
-  // Limpiar stream al desmontar
   useEffect(() => {
     return () => {
       if (stream) {
@@ -79,29 +73,32 @@ const IdCapture: React.FC<IdCaptureProps> = ({ onCapture, onBack, lang }) => {
 
   const startCamera = async (mode: 'user' | 'environment' = facingMode) => {
     setIsLoading(true);
+    setPermissionError(null);
     
-    // Detener tracks anteriores para liberar el hardware
     if (stream) {
       stream.getTracks().forEach(track => track.stop());
       setStream(null);
     }
 
-    // Pequeña pausa para permitir que el hardware se libere antes del nuevo acceso
+    // Verificar contexto seguro (HTTPS) - Indispensable para getUserMedia
+    if (!window.isSecureContext) {
+      setPermissionError(lang === 'es' 
+        ? "La cámara requiere una conexión segura (HTTPS). Por favor verifica que la URL comience con https://" 
+        : "Camera access requires a secure connection (HTTPS). Please ensure the URL starts with https://");
+      setIsLoading(false);
+      return;
+    }
+
     await new Promise(resolve => setTimeout(resolve, 300));
 
     try {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error("Cámara no soportada por el navegador");
+        throw new Error("API de cámara no disponible en este navegador");
       }
 
-      // En tablets Android, a veces las restricciones de resolución causan fallos.
-      // Intentamos primero con la cámara deseada pero sin forzar resolución estricta.
       const attempts = [
-        // Intento 1: Modo deseado con resolución ideal
-        { video: { facingMode: { ideal: mode }, width: { ideal: 1280 }, height: { ideal: 720 } } },
-        // Intento 2: Solo modo deseado (más compatible)
+        { video: { facingMode: { ideal: mode }, width: { ideal: 1920 }, height: { ideal: 1080 } } },
         { video: { facingMode: mode } },
-        // Intento 3: Cualquier cámara de video
         { video: true }
       ];
 
@@ -114,21 +111,27 @@ const IdCapture: React.FC<IdCaptureProps> = ({ onCapture, onBack, lang }) => {
           if (mediaStream) break;
         } catch (e) {
           lastError = e;
-          console.warn(`Intento de cámara fallido con: ${JSON.stringify(constraints)}`, e);
         }
       }
 
-      if (!mediaStream) throw lastError || new Error("No se pudo obtener el stream de video");
+      if (!mediaStream) throw lastError || new Error("Permission Denied");
 
       setStream(mediaStream);
       setFacingMode(mode);
       setIsCameraActive(true);
-    } catch (err) {
-      console.error("Error final de cámara:", err);
-      const msg = lang === 'es' 
-        ? "No se pudo acceder a la cámara. Por favor:\n1. Asegúrate de usar Google Chrome.\n2. Verifica que el sitio tenga permisos de cámara.\n3. Asegúrate de estar en una conexión segura (HTTPS)." 
-        : "Could not access camera. Please:\n1. Use Google Chrome.\n2. Check site permissions.\n3. Ensure you're on a secure connection (HTTPS).";
-      alert(msg);
+    } catch (err: any) {
+      console.error("Error de cámara:", err);
+      let errorMsg = lang === 'es' 
+        ? "Acceso denegado. Por favor, permite el uso de la cámara en los ajustes de tu navegador y recarga la página." 
+        : "Permission denied. Please allow camera access in your browser settings and refresh the page.";
+      
+      if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+        errorMsg = lang === 'es'
+          ? "La cámara está siendo usada por otra aplicación o no está disponible."
+          : "Camera is already in use by another application or is unavailable.";
+      }
+      
+      setPermissionError(errorMsg);
     } finally {
       setIsLoading(false);
     }
@@ -148,9 +151,8 @@ const IdCapture: React.FC<IdCaptureProps> = ({ onCapture, onBack, lang }) => {
     const ctx = canvas.getContext('2d');
     
     if (ctx) {
-      // Dibujar el frame actual
       ctx.drawImage(videoRef.current, 0, 0);
-      const base64 = canvas.toDataURL('image/jpeg', 0.8);
+      const base64 = canvas.toDataURL('image/jpeg', 0.9);
       stopCamera();
       onCapture(base64);
     }
@@ -170,6 +172,21 @@ const IdCapture: React.FC<IdCaptureProps> = ({ onCapture, onBack, lang }) => {
         <h3 className="text-xl md:text-2xl font-bold text-noga-deepteal uppercase tracking-widest">{t.idTitle}</h3>
         <p className="text-xs md:text-sm text-noga-deepteal/60">{t.idSub}</p>
       </div>
+
+      {permissionError && (
+        <div className="w-full mx-4 p-6 bg-red-50 border-2 border-red-200 rounded-3xl flex flex-col items-center text-center space-y-4 animate-in zoom-in duration-300">
+          <div className="p-3 bg-red-100 rounded-full text-red-600">
+            <ShieldAlert className="w-8 h-8" />
+          </div>
+          <p className="text-sm font-bold text-red-700 leading-relaxed">{permissionError}</p>
+          <button 
+            onClick={() => startCamera()} 
+            className="text-xs font-bold uppercase tracking-widest bg-red-600 text-white px-6 py-3 rounded-xl shadow-md hover:bg-red-700"
+          >
+            {lang === 'es' ? 'INTENTAR DE NUEVO' : 'TRY AGAIN'}
+          </button>
+        </div>
+      )}
 
       {!isCameraActive ? (
         <div className="w-full aspect-[4/3] md:aspect-[3/2] bg-noga-lightblue/20 rounded-3xl border-2 border-dashed border-noga-midteal/40 flex flex-col items-center justify-center p-8 space-y-6 mx-4">
@@ -203,12 +220,10 @@ const IdCapture: React.FC<IdCaptureProps> = ({ onCapture, onBack, lang }) => {
               muted 
               className={`w-full h-full object-cover ${facingMode === 'user' ? 'scale-x-[-1]' : ''}`} 
             />
-            {/* Guía visual */}
             <div className="absolute inset-0 border-[20px] md:border-[40px] border-black/40 pointer-events-none flex items-center justify-center">
                <div className="w-full h-full border-2 border-dashed border-white/40 rounded-xl"></div>
             </div>
             
-            {/* Botón para rotar cámara mientras está activa */}
             <button 
               onClick={toggleCamera}
               className="absolute top-4 right-4 bg-black/60 text-white p-3 rounded-full hover:bg-noga-brown transition-colors shadow-lg active:scale-90"
